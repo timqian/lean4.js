@@ -9,12 +9,23 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve tag name
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release view --repo timqian/lean4.js --json tagName -q .tagName)
+          fi
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Download release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir assets
-          gh release download "${{ github.event.release.tag_name }}" \
+          gh release download "${{ steps.tag.outputs.name }}" \
             --repo timqian/lean4.js \
             --dir assets
 
@@ -22,16 +33,16 @@ jobs:
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: r2 object put lean4-wasm/${{ github.event.release.tag_name }}/lean.js --file assets/lean.js
+          command: r2 object put lean4-wasm/${{ steps.tag.outputs.name }}/lean.js --file assets/lean.js
 
       - name: Upload lean.wasm to R2
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: r2 object put lean4-wasm/${{ github.event.release.tag_name }}/lean.wasm --file assets/lean.wasm
+          command: r2 object put lean4-wasm/${{ steps.tag.outputs.name }}/lean.wasm --file assets/lean.wasm
 
       - name: Upload lean-lib.tar.gz to R2
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: r2 object put lean4-wasm/${{ github.event.release.tag_name }}/lean-lib.tar.gz --file assets/lean-lib.tar.gz
+          command: r2 object put lean4-wasm/${{ steps.tag.outputs.name }}/lean-lib.tar.gz --file assets/lean-lib.tar.gz
