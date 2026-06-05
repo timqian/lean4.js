@@ -2,18 +2,8 @@
 
 Run Lean 4 in the browser via WebAssembly.
 
-<sub>This project is mainly based on @cauli's work to compile Lean 4 to WASM: <a href="https://github.com/cauli/lean4">cauli/lean4</a>, with a web playground reference from <a href="https://github.com/cauli/lean4-wasm-in-browser">cauli/lean4-wasm-in-browser</a>.</sub>
+<sub>This project is mainly based on <a href="https://github.com/cauli">cauli</a>'s work to compile Lean 4 to WASM: <a href="https://github.com/cauli/lean4">cauli/lean4</a>, with a web playground reference from <a href="https://github.com/cauli/lean4-wasm-in-browser">cauli/lean4-wasm-in-browser</a>.</sub>
 
-## What This Project Contributes
-
-1. Reduced unnecessary `.olean` artifacts in `lean-lib` (for example, private artifacts such as `olean.private`), bringing the `lean-lib` size down to about 90+ MB and the full bundle to about 300+ MB. This is acceptable for now, and there is still room for further size optimization.
-2. Published `lean4.js` to npm for easier integration and reuse.
-3. Deployed a web playground so people can try it directly in the browser.
-
-## Current Limits and Future Work
-
-1. Even running a minimal Lean file still takes close to 1 minute, which is hard to use in production today.
-2. We tried to support `--server`/`--worker` mode in the browser, but this attempt failed. If startup can be paid only once (instead of per run), the project would become much more practical.
 
 ## Install
 
@@ -39,6 +29,17 @@ lean.dispose()
 WASM assets are loaded from cloudflare R2 automatically. No extra setup needed.
 
 > **Note:** Your page must be served with COOP/COEP headers for SharedArrayBuffer support. See [COOP/COEP setup](#coopcoep-headers) below.
+
+## What This Project Contributes
+
+1. Reduced unnecessary `.olean` artifacts in `lean-lib` (for example, private artifacts such as `olean.private`), bringing the `lean-lib` size down to about 90+ MB and the full bundle to about 300+ MB. This is acceptable for now, and there is still room for further size optimization.
+2. Published `lean4.js` to npm for easier integration and reuse.
+3. Deployed a web playground so people can try it directly in the browser.
+
+## Current Limits and Future Work
+
+1. Even running a minimal Lean file still takes close to 1 minute, which is hard to use in production today.
+2. We tried to support `--server`/`--worker` mode in the browser, but this attempt failed. If startup can be paid only once (instead of per run), the project would become much more practical.
 
 ## API
 
