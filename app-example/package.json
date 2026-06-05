@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "lean4.js": "^0.0.1",
+    "lean4.js": "file:..",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-github-btn": "^1.4.0"

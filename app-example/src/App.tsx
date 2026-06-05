@@ -178,7 +178,7 @@ def hello := "Hello, WASM!"
           Lean4.js
         </h1>
         <p className="subtitle">
-          Run Lean 4 directly in your browser via WebAssembly. Note: Running code currently takes close to 1 minute. Contributions are welcome.
+          Run Lean 4 directly in your browser via WebAssembly. First load downloads three files (lean-lib.tar.gz, lean.js, lean.wasm) in parallel. Note: Running code currently takes close to 1 minute. Contributions are welcome.
         </p>
         <div className="header-github">
           <GitHubButton
@@ -254,7 +254,7 @@ def hello := "Hello, WASM!"
           )}
           <span className={`status status-${status}`}>
             {status === 'idle' && 'Not loaded'}
-            {status === 'loading' && 'Loading...'}
+            {status === 'loading' && 'Loading (first run downloads 3 files in parallel)...'}
             {status === 'ready' && 'Ready'}
             {status === 'running' && 'Running'}
             {status === 'error' && 'Error'}
@@ -346,7 +346,7 @@ def hello := "Hello, WASM!"
 
       <footer className="footer">
         <p className="runtime-note">
-          Run Lean 4 directly in your browser via WebAssembly. 
+          Run Lean 4 directly in your browser via WebAssembly.
         </p>
       </footer>
     </div>

@@ -1,6 +1,6 @@
 {
   "name": "lean4.js",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Run Lean 4 in the browser via WebAssembly",
   "type": "module",
   "main": "src/lean4.js",

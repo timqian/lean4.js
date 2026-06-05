@@ -58,6 +58,81 @@ function parseTar(data) {
   return files
 }
 
+function formatMB(bytes) {
+  return (bytes / 1048576).toFixed(1)
+}
+
+function createAggregateProgressReporter(onProgress, fileNames) {
+  const progressByFile = new Map(fileNames.map((name) => [name, { received: 0, total: 0 }]))
+
+  return (fileName, received, total) => {
+    const state = progressByFile.get(fileName)
+    if (!state) return
+
+    state.received = received
+    if (total > 0) state.total = total
+
+    let receivedSum = 0
+    let totalSum = 0
+    let allTotalsKnown = true
+
+    progressByFile.forEach((item) => {
+      receivedSum += item.received
+      if (item.total > 0) {
+        totalSum += item.total
+      } else {
+        allTotalsKnown = false
+      }
+    })
+
+    if (allTotalsKnown && totalSum > 0) {
+      const pct = Math.round((receivedSum / totalSum) * 100)
+      onProgress?.(`Downloading: ${formatMB(receivedSum)}/${formatMB(totalSum)} MB (${pct}%)`)
+      return
+    }
+
+    onProgress?.(`Downloading: ${formatMB(receivedSum)} MB (estimating total...)`)
+  }
+}
+
+async function downloadBinary(url, onProgress) {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Failed to download ${url}: ${response.status}`)
+
+  const contentLength = response.headers.get('Content-Length')
+  const parsedTotal = contentLength ? Number.parseInt(contentLength, 10) : 0
+  const totalBytes = Number.isFinite(parsedTotal) ? parsedTotal : 0
+
+  if (response.body) {
+    const reader = response.body.getReader()
+    const chunks = []
+    let received = 0
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      received += value.length
+      onProgress?.(received, totalBytes)
+    }
+
+    const data = new Uint8Array(received)
+    let pos = 0
+    for (const chunk of chunks) {
+      data.set(chunk, pos)
+      pos += chunk.length
+    }
+
+    // If server did not send Content-Length, finalize using received bytes.
+    if (totalBytes === 0) onProgress?.(received, received)
+    return data
+  }
+
+  const data = new Uint8Array(await response.arrayBuffer())
+  onProgress?.(data.length, totalBytes || data.length)
+  return data
+}
+
 // ---- IndexedDB cache ----
 
 const DB_NAME = 'lean-lib-cache'
@@ -277,36 +352,28 @@ export class Lean4 {
       this.onProgress?.(`Loaded ${cached.size} files from cache`)
     }
 
+    let leanJsData
+    let leanWasmData
+
     if (this.libraryFiles.size === 0) {
       // Download bundle
       const bundleUrl = this.leanLibUrl
-      this.onProgress?.('Downloading library bundle...')
+      this.onProgress?.('Downloading required files in parallel: lean-lib.tar.gz, lean.js, lean.wasm...')
 
-      const response = await fetch(bundleUrl)
-      if (!response.ok) throw new Error(`Failed to download ${bundleUrl}: ${response.status}`)
+      const reportProgress = createAggregateProgressReporter(this.onProgress, [
+        'lean-lib.tar.gz',
+        'lean.js',
+        'lean.wasm',
+      ])
 
-      const contentLength = response.headers.get('Content-Length')
-      const totalBytes = contentLength ? parseInt(contentLength) : 0
-
-      let rawData
-      if (totalBytes && response.body) {
-        const reader = response.body.getReader()
-        const chunks = []
-        let received = 0
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          chunks.push(value)
-          received += value.length
-          const pct = Math.round((received / totalBytes) * 100)
-          this.onProgress?.(`Downloading: ${(received / 1048576).toFixed(1)}/${(totalBytes / 1048576).toFixed(1)} MB (${pct}%)`)
-        }
-        rawData = new Uint8Array(received)
-        let pos = 0
-        for (const chunk of chunks) { rawData.set(chunk, pos); pos += chunk.length }
-      } else {
-        rawData = new Uint8Array(await response.arrayBuffer())
-      }
+      // First-time init: download all required assets concurrently.
+      const [rawData, leanJsBytes, leanWasmBytes] = await Promise.all([
+        downloadBinary(bundleUrl, (received, total) => reportProgress('lean-lib.tar.gz', received, total)),
+        downloadBinary(this.leanJsUrl, (received, total) => reportProgress('lean.js', received, total)),
+        downloadBinary(this.leanWasmUrl, (received, total) => reportProgress('lean.wasm', received, total)),
+      ])
+      leanJsData = leanJsBytes
+      leanWasmData = leanWasmBytes
 
       // Decompress if still gzipped (browser may have already decompressed)
       this.onProgress?.('Decompressing...')
@@ -323,23 +390,24 @@ export class Lean4 {
 
       // Cache in IndexedDB
       this.onProgress?.('Caching for next time...')
-      setCache(this.libraryFiles).catch(() => {})
+      setCache(this.libraryFiles).catch(() => { })
 
       this.onProgress?.(`Ready (${this.libraryFiles.size} library files)`)
+    } else {
+      this.onProgress?.('Downloading lean.js and lean.wasm...')
+      const reportProgress = createAggregateProgressReporter(this.onProgress, [
+        'lean.js',
+        'lean.wasm',
+      ])
+        ;[leanJsData, leanWasmData] = await Promise.all([
+          downloadBinary(this.leanJsUrl, (received, total) => reportProgress('lean.js', received, total)),
+          downloadBinary(this.leanWasmUrl, (received, total) => reportProgress('lean.wasm', received, total)),
+        ])
     }
 
-    // Pre-fetch lean.js and lean.wasm as blob URLs to avoid CORS issues
-    this.onProgress?.('Downloading lean.js and lean.wasm...')
-    const [leanJsRes, leanWasmRes] = await Promise.all([
-      fetch(this.leanJsUrl),
-      fetch(this.leanWasmUrl),
-    ])
-    if (!leanJsRes.ok) throw new Error(`Failed to download lean.js: ${leanJsRes.status}`)
-    if (!leanWasmRes.ok) throw new Error(`Failed to download lean.wasm: ${leanWasmRes.status}`)
-
     this.onProgress?.('Preparing WASM...')
-    this.leanJsBlobUrl = URL.createObjectURL(await leanJsRes.blob())
-    this.leanWasmBlobUrl = URL.createObjectURL(await leanWasmRes.blob())
+    this.leanJsBlobUrl = URL.createObjectURL(new Blob([leanJsData]))
+    this.leanWasmBlobUrl = URL.createObjectURL(new Blob([leanWasmData]))
 
     this.initialized = true
   }
