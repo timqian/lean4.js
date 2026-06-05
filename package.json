@@ -1,0 +1,47 @@
+{
+  "name": "lean4.js",
+  "version": "0.0.1",
+  "description": "Run Lean 4 in the browser via WebAssembly",
+  "type": "module",
+  "main": "src/lean4.js",
+  "module": "src/lean4.js",
+  "types": "src/lean4.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/lean4.d.ts",
+      "import": "./src/lean4.js"
+    },
+    "./vite": {
+      "types": "./src/vite-plugin.d.ts",
+      "import": "./src/vite-plugin.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "lean4",
+    "lean",
+    "wasm",
+    "webassembly",
+    "theorem-prover",
+    "proof-assistant"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/timqian/lean4.js"
+  },
+  "peerDependencies": {
+    "vite": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  }
+}

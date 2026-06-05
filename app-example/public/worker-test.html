@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Lean --worker warm test (PROXY_TO_PTHREAD)</title>
+  <style>
+    body { font: 13px/1.5 ui-monospace, monospace; margin: 1rem; background: #0a0a0a; color: #eee; }
+    h1 { font-size: 15px; }
+    #log { white-space: pre-wrap; }
+    .diag { color: #7fd; } .warn { color: #fd7; } .err { color: #f77; } .t { color: #9ad; }
+  </style>
+</head>
+<body>
+  <h1>Lean <code>--worker</code> warm test</h1>
+  <p>Loads <code>lean.wasm</code> in a Web Worker, runs <code>lean --worker</code>, opens a doc,
+     then edits it. Watch the timestamps: first <code>publishDiagnostics</code> = one-time import;
+     the post-edit one should be ~instant if the warm worker works.</p>
+  <div id="log"></div>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const T0 = performance.now();
+    const ts = () => ((performance.now() - T0) / 1000).toFixed(2);
+    const add = (msg, cls) => {
+      const line = `[+${ts()}s] ${msg}`;
+      const span = document.createElement('span');
+      span.className = cls || '';
+      span.textContent = line + '\n';
+      logEl.appendChild(span);
+      console.log(line); // mirror to console for headless capture
+    };
+
+    if (typeof SharedArrayBuffer === 'undefined') {
+      add('SharedArrayBuffer unavailable — page needs COOP/COEP headers.', 'err');
+      throw new Error('no SAB');
+    }
+
+    const CAP = 1 << 20;
+    const sab = new SharedArrayBuffer(16 + CAP);
+    const control = new Int32Array(sab, 0, 4); // [ready, len, eof]
+    const data = new Uint8Array(sab, 16, CAP);
+
+    // ---- non-blocking SAB writer (page main thread can't Atomics.wait) ----
+    const enc = new TextEncoder();
+    function frame(obj) {
+      const body = enc.encode(JSON.stringify(obj));
+      const head = enc.encode(`Content-Length: ${body.length}\r\n\r\n`);
+      const out = new Uint8Array(head.length + body.length);
+      out.set(head); out.set(body, head.length);
+      return out;
+    }
+    const q = [];
+    function pump() {
+      if (!q.length) return;
+      if (Atomics.load(control, 0) !== 0) { setTimeout(pump, 5); return; }
+      const b = q.shift();
+      data.set(b, 0); control[1] = b.length;
+      Atomics.store(control, 0, 1); Atomics.notify(control, 0);
+      if (q.length) setTimeout(pump, 5);
+    }
+    const send = (obj) => { q.push(frame(obj)); pump(); };
+
+    const uri = 'file:///doc1.lean';
+    let diagCount = 0;
+    let importDoneAt = null;
+
+    const worker = new Worker('/lean-worker-test.js');
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'log') { add(m.line, 't'); return; }
+      if (m.type === 'exit') { add('worker exited code=' + m.code, 'warn'); return; }
+      if (m.type === 'stderr') {
+        if (!/DEBUG:(GO|FIND|FINALIZE|INIT)/.test(m.line)) add('stderr: ' + m.line.slice(0, 120), 'warn');
+        return;
+      }
+      if (m.type === 'stdout') {
+        if (!m.line.includes('publishDiagnostics')) return;
+        diagCount++;
+        const v = (m.line.match(/"version":(\d+)/) || [])[1];
+        if (diagCount === 1) {
+          importDoneAt = performance.now();
+          add(`>>> publishDiagnostics #1 (v${v}) — COLD import done`, 'diag');
+          add('--- now editing the doc (didChange) ---');
+          send({ jsonrpc: '2.0', method: 'textDocument/didChange',
+                 params: { textDocument: { uri, version: 2 },
+                           contentChanges: [{ text: '#check 2 + 2\n#check 3 + 3\n' }] } });
+        } else {
+          const warm = ((performance.now() - importDoneAt) / 1000).toFixed(2);
+          add(`>>> publishDiagnostics #${diagCount} (v${v}) — WARM re-elaborate in ~${warm}s`, 'diag');
+        }
+      }
+    };
+
+    (async () => {
+      add('fetching lean-lib.tar.gz (on page) ...');
+      let gz;
+      try {
+        const r = await fetch('/lean-wasm/lean-lib.tar.gz');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        gz = await r.arrayBuffer();
+        add(`fetched ${(gz.byteLength / 1048576).toFixed(0)} MB; starting worker`);
+      } catch (err) { add('page fetch FAILED: ' + err, 'err'); return; }
+
+      worker.postMessage({ type: 'start', sab, gz }, [gz]);
+
+      // The SAB stdin queue preserves order even if the worker isn't reading yet,
+      // so we can send the LSP session right away.
+      add('sending initialize + didOpen (#check 2+2)');
+      send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { processId: null, rootUri: null, capabilities: {} } });
+      send({ jsonrpc: '2.0', method: 'textDocument/didOpen',
+             params: { textDocument: { uri, languageId: 'lean', version: 1, text: '#check 2 + 2\n' } } });
+    })();
+  </script>
+</body>
+</html>
