@@ -2,7 +2,7 @@
 
 Run Lean 4 in the browser via WebAssembly.
 
-<sub>This project is mainly based on <a href="https://github.com/cauli">cauli</a>'s work to compile Lean 4 to WASM: <a href="https://github.com/cauli/lean4">cauli/lean4</a>, with a web playground reference from <a href="https://github.com/cauli/lean4-wasm-in-browser">cauli/lean4-wasm-in-browser</a>.</sub>
+<sub>This project is mainly based on <a href="https://github.com/cauli">@cauli</a>'s work to compile Lean 4 to WASM: <a href="https://github.com/cauli/lean4">cauli/lean4</a>, with a web playground reference from <a href="https://github.com/cauli/lean4-wasm-in-browser">cauli/lean4-wasm-in-browser</a>.</sub>
 
 
 ## Install
